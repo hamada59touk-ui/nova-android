@@ -1,35 +1,63 @@
 package com.example.nova
 
+import android.app.Activity
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.activity_main)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
+        }
 
-        val answerText = findViewById<TextView>(R.id.answerText)
-        val messageInput = findViewById<EditText>(R.id.messageInput)
-        val sendButton = findViewById<Button>(R.id.sendButton)
-        val micButton = findViewById<Button>(R.id.micButton)
+        val titel = TextView(this).apply {
+            text = "NOVA"
+            textSize = 30f
+        }
 
-        sendButton.setOnClickListener {
+        val antwort = TextView(this).apply {
+            text = "Hallo! Ich bin Nova."
+            textSize = 18f
+        }
 
-            val nachricht = messageInput.text.toString()
+        val eingabe = EditText(this).apply {
+            hint = "Schreib Nova etwas..."
+        }
 
-            if (nachricht.isNotBlank()) {
-                answerText.text = "Du: $nachricht\n\nNova: Verbindung zum Agenten kommt als Nächstes."
-                messageInput.text.clear()
+        val senden = Button(this).apply {
+            text = "Senden"
+        }
+
+        val mikrofon = Button(this).apply {
+            text = "Mit Nova sprechen"
+        }
+
+        senden.setOnClickListener {
+            val text = eingabe.text.toString()
+
+            if (text.isNotBlank()) {
+                antwort.text = "Du: $text\n\nNova: Ich funktioniere!"
+                eingabe.text.clear()
             }
         }
 
-        micButton.setOnClickListener {
-            answerText.text = "🎤 Sprachsteuerung wird vorbereitet..."
+        mikrofon.setOnClickListener {
+            antwort.text = "Sprachfunktion kommt als Nächstes."
         }
+
+        layout.addView(titel)
+        layout.addView(antwort)
+        layout.addView(eingabe)
+        layout.addView(senden)
+        layout.addView(mikrofon)
+
+        setContentView(layout)
     }
 }
