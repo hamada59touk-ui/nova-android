@@ -2,6 +2,9 @@ package com.example.nova
 
 import android.app.Activity
 import android.os.Bundle
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.speech.tts.TextToSpeech
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -9,15 +12,25 @@ import android.widget.TextView
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
-class MainActivity : Activity() {
+class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private lateinit var antwort: TextView
     private lateinit var eingabe: EditText
     private lateinit var senden: Button
+    private lateinit var sprechen: Button
+
+    private lateinit var tts: TextToSpeech
+
+    private val SPRACHE_REQUEST = 100
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Sprachausgabe starten
+        tts = TextToSpeech(this, this)
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -42,39 +55,135 @@ class MainActivity : Activity() {
             text = "Senden"
         }
 
-        val mikrofon = Button(this).apply {
+        sprechen = Button(this).apply {
             text = "🎤 Mit Nova sprechen"
         }
 
+
+        // TEXT SENDEN
+
         senden.setOnClickListener {
 
-            val nachricht = eingabe.text.toString().trim()
+            val nachricht =
+                eingabe.text.toString().trim()
 
             if (nachricht.isNotEmpty()) {
 
-                antwort.text = "Nova denkt..."
-                senden.isEnabled = false
                 eingabe.text.clear()
 
                 frageNova(nachricht)
             }
         }
 
-        mikrofon.setOnClickListener {
-            antwort.text = "🎤 Sprache kommt als Nächstes."
+
+        // MIKROFON
+
+        sprechen.setOnClickListener {
+
+            starteSpracherkennung()
         }
+
 
         layout.addView(titel)
         layout.addView(antwort)
         layout.addView(eingabe)
         layout.addView(senden)
-        layout.addView(mikrofon)
+        layout.addView(sprechen)
 
         setContentView(layout)
     }
 
 
+    // ==============================
+    // SPRACHERKENNUNG
+    // ==============================
+
+    private fun starteSpracherkennung() {
+
+        val intent = Intent(
+            RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+        )
+
+        intent.putExtra(
+            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+        )
+
+        intent.putExtra(
+            RecognizerIntent.EXTRA_LANGUAGE,
+            "de-DE"
+        )
+
+        intent.putExtra(
+            RecognizerIntent.EXTRA_PROMPT,
+            "Sprich mit Nova"
+        )
+
+        try {
+
+            startActivityForResult(
+                intent,
+                SPRACHE_REQUEST
+            )
+
+        } catch (fehler: Exception) {
+
+            antwort.text =
+                "Spracherkennung ist auf diesem Gerät nicht verfügbar."
+        }
+    }
+
+
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
+
+        super.onActivityResult(
+            requestCode,
+            resultCode,
+            data
+        )
+
+        if (
+            requestCode == SPRACHE_REQUEST &&
+            resultCode == RESULT_OK
+        ) {
+
+            val ergebnisse =
+                data?.getStringArrayListExtra(
+                    RecognizerIntent.EXTRA_RESULTS
+                )
+
+            val gesprochenerText =
+                ergebnisse?.firstOrNull()
+
+            if (!gesprochenerText.isNullOrBlank()) {
+
+                eingabe.setText(
+                    gesprochenerText
+                )
+
+                frageNova(
+                    gesprochenerText
+                )
+            }
+        }
+    }
+
+
+    // ==============================
+    // NOVA API
+    // ==============================
+
     private fun frageNova(nachricht: String) {
+
+        antwort.text = "Nova denkt..."
+
+        senden.isEnabled = false
+        sprechen.isEnabled = false
+
 
         Thread {
 
@@ -85,7 +194,8 @@ class MainActivity : Activity() {
                 )
 
                 val verbindung =
-                    url.openConnection() as HttpURLConnection
+                    url.openConnection()
+                            as HttpURLConnection
 
                 verbindung.requestMethod = "POST"
 
@@ -108,11 +218,13 @@ class MainActivity : Activity() {
                 )
 
 
-                verbindung.outputStream.use { output ->
+                verbindung.outputStream.use {
 
-                    output.write(
+                    it.write(
                         json.toString()
-                            .toByteArray(Charsets.UTF_8)
+                            .toByteArray(
+                                Charsets.UTF_8
+                            )
                     )
                 }
 
@@ -131,11 +243,13 @@ class MainActivity : Activity() {
                             }
 
 
-                    val antwortJson =
+                    val jsonAntwort =
                         JSONObject(text)
 
                     val novaAntwort =
-                        antwortJson.getString("reply")
+                        jsonAntwort.getString(
+                            "reply"
+                        )
 
 
                     runOnUiThread {
@@ -143,17 +257,28 @@ class MainActivity : Activity() {
                         antwort.text =
                             "Nova:\n\n$novaAntwort"
 
+                        // Antwort laut vorlesen
+                        tts.speak(
+                            novaAntwort,
+                            TextToSpeech.QUEUE_FLUSH,
+                            null,
+                            "novaAntwort"
+                        )
+
                         senden.isEnabled = true
+                        sprechen.isEnabled = true
                     }
+
 
                 } else {
 
                     runOnUiThread {
 
                         antwort.text =
-                            "Fehler vom Server: $status"
+                            "Serverfehler: $status"
 
                         senden.isEnabled = true
+                        sprechen.isEnabled = true
                     }
                 }
 
@@ -169,9 +294,33 @@ class MainActivity : Activity() {
                         "Verbindungsfehler:\n${fehler.message}"
 
                     senden.isEnabled = true
+                    sprechen.isEnabled = true
                 }
             }
 
         }.start()
+    }
+
+
+    // ==============================
+    // TEXT-TO-SPEECH
+    // ==============================
+
+    override fun onInit(status: Int) {
+
+        if (status == TextToSpeech.SUCCESS) {
+
+            tts.language =
+                Locale.GERMANY
+        }
+    }
+
+
+    override fun onDestroy() {
+
+        tts.stop()
+        tts.shutdown()
+
+        super.onDestroy()
     }
 }
